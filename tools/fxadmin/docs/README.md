@@ -455,10 +455,13 @@ fxadmin modify party node --party 1 --role consenter \
 | `--sign-cert` | no | Path to new signing certificate (unchanged if omitted) |
 | `--block` | yes | Config block to edit in place |
 
+The certificate must be the first PEM block in its file. Anything after it, such as a private key,
+is ignored.
+
 **What else changes in the block**
 
-The command updates the node in the shared config. Some nodes parameters also appear in other places of
-the block, and the command updates those too:
+The command updates the node in the shared config. Some of a node's fields also appear in other places
+of the block, and the command updates those too:
 
 | Role | Also updated |
 |------|--------------|
@@ -467,15 +470,35 @@ the block, and the command updates those too:
 | `consenter` | Its entry in the consenter mapping (the `Orderers` value) gets the same host, port and certificates. A new signing certificate also updates the `BlockValidation` policy. |
 | `batcher` | Nothing else. |
 
+For a router or an assembler, `--host` and `--port` change two addresses of the node:
+
+- its address in the shared config, which the other orderer nodes use;
+- its address in the orderer org's `Endpoints`, which clients use.
+
+Only the given part changes: `--port` alone keeps each address's host, and `--host` alone keeps
+each address's port.
+
+> **Note** — Behind a load balancer or NAT, the `Endpoints` address is the public front end, and it
+> differs from the shared config address. The command still changes both. To change only one of
+> them, use the [manual step](#manual-step). 
+
 **When the command fails**
 
 The command leaves the block unchanged if:
 
 - No field to change is given.
-- The party, or the batcher's shard, is not in the block.
-- A certificate path does not exist, or the file there is not a PEM certificate.
-- A router or assembler endpoint changes, but no orderer org lists the party's `broadcast` or
-  `deliver` address.
+- `--host` includes a port, a comma or a space. Give the host only.
+- The party, or the node (for a batcher, the shard), is not in the block.
+- A certificate path does not exist, or the first PEM block in the file is not a certificate.
+- The edited config is not a valid channel config.
+
+When you change the host or port of a router or an assembler, the command also fails if:
+
+- An address in an orderer org's `Endpoints` cannot be parsed. This applies to every address,
+  including those of other parties.
+- No orderer org lists the party's address for that node.
+
+The command changes only an address that has the party's ID and only the node's API.
 
 **Checked by the orderer on submission**
 
@@ -484,6 +507,9 @@ The command leaves the block unchanged if:
 - Neither certificate may be expired.
 - A config update can change only one party. You can make several changes to the same party in
   one `next.pb`, but not changes to two parties.
+
+`fxadmin` does not check these rules before it writes the block, so a mistake is reported only when
+the transaction is submitted.
 
 ___
 
